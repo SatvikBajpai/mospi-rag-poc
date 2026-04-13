@@ -1,0 +1,114 @@
+[
+  {
+    "id": "cpi-feb26-headline",
+    "topic": "CPI",
+    "question": "What was India's All-India CPI headline inflation rate in February 2026?",
+    "expected_any_of": ["3.21"],
+    "expected_source": "CPI_Feb2026.pdf"
+  },
+  {
+    "id": "cpi-feb26-food",
+    "topic": "CPI",
+    "question": "What was the food price inflation (CFPI) rate in February 2026?",
+    "expected_any_of": ["3.47"],
+    "expected_source": "CPI_Feb2026.pdf"
+  },
+  {
+    "id": "cpi-feb26-housing",
+    "topic": "CPI",
+    "question": "What was the housing inflation rate in February 2026?",
+    "expected_any_of": ["2.12"],
+    "expected_source": "CPI_Feb2026.pdf"
+  },
+  {
+    "id": "cpi-jan26-headline",
+    "topic": "CPI",
+    "question": "What was India's CPI inflation rate in January 2026?",
+    "expected_any_of": ["2.75"],
+    "expected_source": "CPI_Jan2026.pdf"
+  },
+  {
+    "id": "cpi-dec25-headline",
+    "topic": "CPI",
+    "question": "What was the All-India headline CPI inflation rate in December 2025?",
+    "expected_any_of": ["1.33"],
+    "expected_source": "CPI_Dec2025.pdf"
+  },
+  {
+    "id": "cpi-nov25-food",
+    "topic": "CPI",
+    "question": "What was the food price inflation rate in November 2025?",
+    "expected_any_of": ["-3.91", "3.91"],
+    "expected_source": "CPI_Nov2025.pdf"
+  },
+  {
+    "id": "iip-feb26-overall",
+    "topic": "IIP",
+    "question": "What was the year-on-year IIP growth rate in February 2026?",
+    "expected_any_of": ["5.2"],
+    "expected_source": "IIP_Feb2026.pdf"
+  },
+  {
+    "id": "iip-feb26-manufacturing",
+    "topic": "IIP",
+    "question": "What was the growth rate of the manufacturing sector in February 2026 IIP?",
+    "expected_any_of": ["6.0"],
+    "expected_source": "IIP_Feb2026.pdf"
+  },
+  {
+    "id": "iip-dec25-overall",
+    "topic": "IIP",
+    "question": "What was the IIP growth rate in December 2025?",
+    "expected_any_of": ["7.8"],
+    "expected_source": "IIP_Dec2025.pdf"
+  },
+  {
+    "id": "iip-dec25-manufacturing",
+    "topic": "IIP",
+    "question": "What was the manufacturing sector growth rate in December 2025?",
+    "expected_any_of": ["8.1"],
+    "expected_source": "IIP_Dec2025.pdf"
+  },
+  {
+    "id": "iip-nov25-overall",
+    "topic": "IIP",
+    "question": "What was the IIP growth rate in November 2025?",
+    "expected_any_of": ["6.7"],
+    "expected_source": "IIP_Nov2025.pdf"
+  },
+  {
+    "id": "iip-nov25-manufacturing",
+    "topic": "IIP",
+    "question": "What was the manufacturing sector growth rate in November 2025?",
+    "expected_any_of": ["8.0"],
+    "expected_source": "IIP_Nov2025.pdf"
+  },
+  {
+    "id": "plfs-octdec25-lfpr",
+    "topic": "PLFS",
+    "question": "What was the overall Labour Force Participation Rate for persons aged 15 years and above in October-December 2025?",
+    "expected_any_of": ["55.8"],
+    "expected_source": "PLFS_OctDec2025.pdf"
+  },
+  {
+    "id": "plfs-octdec25-female-lfpr",
+    "topic": "PLFS",
+    "question": "What was the female LFPR in October-December 2025?",
+    "expected_any_of": ["34.9"],
+    "expected_source": "PLFS_OctDec2025.pdf"
+  },
+  {
+    "id": "plfs-octdec25-wpr",
+    "topic": "PLFS",
+    "question": "What was the overall Worker Population Ratio for persons aged 15 and above in October-December 2025?",
+    "expected_any_of": ["53.1"],
+    "expected_source": "PLFS_OctDec2025.pdf"
+  },
+  {
+    "id": "out-of-corpus",
+    "topic": null,
+    "question": "What was India's GDP growth rate in Q3 FY26?",
+    "expected_any_of": ["could not find"],
+    "expected_source": null
+  }
+]

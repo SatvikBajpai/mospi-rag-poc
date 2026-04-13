@@ -1,0 +1,179 @@
+[
+  {
+    "id": "cpi-feb26-headline",
+    "question": "What was India's All-India CPI headline inflation rate in February 2026?",
+    "answer": "3.21%\n\nSources:\n  - CPI_Feb2026.pdf (page 1)\n  - CPI_Feb2026.pdf (page 4)\n  - CPI_Jan2026.pdf (page 5)\n  - CPI_Jan2026.pdf (page 2)\n  - CPI_Feb2026.pdf (page 3)",
+    "answer_ok": true,
+    "retrieval_ok": true,
+    "expected": [
+      "3.21"
+    ],
+    "elapsed": 31.526933908462524
+  },
+  {
+    "id": "cpi-feb26-food",
+    "question": "What was the food price inflation (CFPI) rate in February 2026?",
+    "answer": "The food price inflation rate in February 2026 was 3.46%.\n\nSources:\n  - CPI_Jan2026.pdf (page 2)\n  - CPI_Feb2026.pdf (page 4)\n  - CPI_Feb2026.pdf (page 1)\n  - CPI_Jan2026.pdf (page 4)\n  - CPI_Jan2026.pdf (page 5)",
+    "answer_ok": false,
+    "retrieval_ok": true,
+    "expected": [
+      "3.47"
+    ],
+    "elapsed": 18.532510995864868
+  },
+  {
+    "id": "cpi-feb26-housing",
+    "question": "What was the housing inflation rate in February 2026?",
+    "answer": "2.12%\n\nSources:\n  - CPI_Feb2026.pdf (page 2)\n  - CPI_Jan2026.pdf (page 2)\n  - CPI_Feb2026.pdf (page 1)\n  - CPI_Feb2026.pdf (page 4)\n  - CPI_Jan2026.pdf (page 5)",
+    "answer_ok": true,
+    "retrieval_ok": true,
+    "expected": [
+      "2.12"
+    ],
+    "elapsed": 15.562198162078857
+  },
+  {
+    "id": "cpi-jan26-headline",
+    "question": "What was India's CPI inflation rate in January 2026?",
+    "answer": "India's CPI inflation rate in January 2026 was 2.73%.\n\nSources:\n  - CPI_Jan2026.pdf (page 2)\n  - CPI_Feb2026.pdf (page 4)\n  - CPI_Feb2026.pdf (page 1)\n  - CPI_Jan2026.pdf (page 5)\n  - CPI_Dec2025.pdf (page 3)",
+    "answer_ok": false,
+    "retrieval_ok": true,
+    "expected": [
+      "2.75"
+    ],
+    "elapsed": 31.746312856674194
+  },
+  {
+    "id": "cpi-dec25-headline",
+    "question": "What was the All-India headline CPI inflation rate in December 2025?",
+    "answer": "1.33%\n\nSources:\n  - CPI_Dec2025.pdf (page 3)\n  - CPI_Jan2026.pdf (page 5)\n  - CPI_Dec2025.pdf (page 1)\n  - CPI_Nov2025.pdf (page 1)\n  - CPI_Nov2025.pdf (page 3)",
+    "answer_ok": true,
+    "retrieval_ok": true,
+    "expected": [
+      "1.33"
+    ],
+    "elapsed": 34.73360896110535
+  },
+  {
+    "id": "cpi-nov25-food",
+    "question": "What was the food price inflation rate in November 2025?",
+    "answer": "The food price inflation rate in November 2025 was -3.08%.\n\nSources:\n  - CPI_Nov2025.pdf (page 2)\n  - CPI_Dec2025.pdf (page 2)\n  - CPI_Nov2025.pdf (page 1)\n  - CPI_Nov2025.pdf (page 3)\n  - CPI_Dec2025.pdf (page 3)",
+    "answer_ok": false,
+    "retrieval_ok": true,
+    "expected": [
+      "-3.91",
+      "3.91"
+    ],
+    "elapsed": 25.45580220222473
+  },
+  {
+    "id": "iip-feb26-overall",
+    "question": "What was the year-on-year IIP growth rate in February 2026?",
+    "answer": "The year-on-year IIP growth rate in February 2026 was 5.2%.\n\nSources:\n  - IIP_Feb2026.pdf (page 1)\n  - IIP_Dec2025.pdf (page 1)\n  - IIP_Nov2025.pdf (page 1)\n  - IIP_Feb2026.pdf (page 2)\n  - IIP_Feb2026.pdf (page 3)",
+    "answer_ok": true,
+    "retrieval_ok": true,
+    "expected": [
+      "5.2"
+    ],
+    "elapsed": 16.51424288749695
+  },
+  {
+    "id": "iip-feb26-manufacturing",
+    "question": "What was the growth rate of the manufacturing sector in February 2026 IIP?",
+    "answer": "The manufacturing sector grew by 8.1% in February 2026 compared to the same period in 2025.\n\nSources:\n  - IIP_Feb2026.pdf (page 1)\n  - IIP_Dec2025.pdf (page 1)\n  - IIP_Nov2025.pdf (page 1)\n  - IIP_Feb2026.pdf (page 2)\n  - IIP_Feb2026.pdf (page 3)",
+    "answer_ok": false,
+    "retrieval_ok": true,
+    "expected": [
+      "6.0"
+    ],
+    "elapsed": 16.672574758529663
+  },
+  {
+    "id": "iip-dec25-overall",
+    "question": "What was the IIP growth rate in December 2025?",
+    "answer": "The IIP growth rate for December 2025 was 7.8%.\n\nSources:\n  - IIP_Dec2025.pdf (page 1)\n  - IIP_Nov2025.pdf (page 1)\n  - IIP_Feb2026.pdf (page 1)\n  - IIP_Dec2025.pdf (page 3)\n  - IIP_Nov2025.pdf (page 3)",
+    "answer_ok": true,
+    "retrieval_ok": true,
+    "expected": [
+      "7.8"
+    ],
+    "elapsed": 14.786859035491943
+  },
+  {
+    "id": "iip-dec25-manufacturing",
+    "question": "What was the manufacturing sector growth rate in December 2025?",
+    "answer": "The manufacturing sector grew by 8.1 percentage points in December 2025 compared to November 2025.\n\nSources:\n  - IIP_Dec2025.pdf (page 1)\n  - IIP_Nov2025.pdf (page 1)\n  - IIP_Feb2026.pdf (page 1)\n  - IIP_Dec2025.pdf (page 2)\n  - IIP_Nov2025.pdf (page 2)",
+    "answer_ok": true,
+    "retrieval_ok": true,
+    "expected": [
+      "8.1"
+    ],
+    "elapsed": 19.125658750534058
+  },
+  {
+    "id": "iip-nov25-overall",
+    "question": "What was the IIP growth rate in November 2025?",
+    "answer": "The IIP growth rate for November 2025 was 6.7%.\n\nSources:\n  - IIP_Nov2025.pdf (page 1)\n  - IIP_Dec2025.pdf (page 1)\n  - IIP_Nov2025.pdf (page 3)\n  - IIP_Dec2025.pdf (page 3)\n  - IIP_Feb2026.pdf (page 1)",
+    "answer_ok": true,
+    "retrieval_ok": true,
+    "expected": [
+      "6.7"
+    ],
+    "elapsed": 16.236743211746216
+  },
+  {
+    "id": "iip-nov25-manufacturing",
+    "question": "What was the manufacturing sector growth rate in November 2025?",
+    "answer": "The manufacturing sector grew by 8.0% in November 2025 according to the quick estimate.\n\nSources:\n  - IIP_Nov2025.pdf (page 1)\n  - IIP_Dec2025.pdf (page 1)\n  - IIP_Feb2026.pdf (page 1)\n  - IIP_Nov2025.pdf (page 2)\n  - IIP_Nov2025.pdf (page 3)",
+    "answer_ok": true,
+    "retrieval_ok": true,
+    "expected": [
+      "8.0"
+    ],
+    "elapsed": 17.44621706008911
+  },
+  {
+    "id": "plfs-octdec25-lfpr",
+    "question": "What was the overall Labour Force Participation Rate for persons aged 15 years and above in October-December 2025?",
+    "answer": "The overall Labour Force Participation Rate (LFPR) for persons aged 15 years and above in October-December 2025 was 55.8%.\n\nSources:\n  - PLFS_OctDec2025.pdf (page 5)\n  - PLFS_OctDec2025.pdf (page 8)\n  - PLFS_OctDec2024.pdf (page 5)\n  - PLFS_JulSep2024.pdf (page 5)\n  - PLFS_OctDec2025.pdf (page 2)",
+    "answer_ok": true,
+    "retrieval_ok": true,
+    "expected": [
+      "55.8"
+    ],
+    "elapsed": 28.738159894943237
+  },
+  {
+    "id": "plfs-octdec25-female-lfpr",
+    "question": "What was the female LFPR in October-December 2025?",
+    "answer": "The female LFPR in October-December 2025 was 34.9%.\n\nSources:\n  - PLFS_OctDec2025.pdf (page 4)\n  - PLFS_OctDec2025.pdf (page 2)\n  - PLFS_OctDec2024.pdf (page 5)\n  - PLFS_JulSep2024.pdf (page 5)\n  - PLFS_OctDec2024.pdf (page 51)",
+    "answer_ok": true,
+    "retrieval_ok": true,
+    "expected": [
+      "34.9"
+    ],
+    "elapsed": 17.122027158737183
+  },
+  {
+    "id": "plfs-octdec25-wpr",
+    "question": "What was the overall Worker Population Ratio for persons aged 15 and above in October-December 2025?",
+    "answer": "The overall Worker Population Ratio (WPR) for persons aged 15 years and above in October-December 2025 was 53.1%.\n\nSources:\n  - PLFS_OctDec2025.pdf (page 5)\n  - PLFS_OctDec2025.pdf (page 8)\n  - PLFS_OctDec2025.pdf (page 2)\n  - PLFS_OctDec2025.pdf (page 6)\n  - PLFS_OctDec2025.pdf (page 7)",
+    "answer_ok": true,
+    "retrieval_ok": true,
+    "expected": [
+      "53.1"
+    ],
+    "elapsed": 24.826359033584595
+  },
+  {
+    "id": "out-of-corpus",
+    "question": "What was India's GDP growth rate in Q3 FY26?",
+    "answer": "The quick estimate of the Index of Industrial Production (IIP) for Q3 FY26 shows an increase of 5.2% compared to the previous quarter.\n\nSources:\n  - CPI_Nov2025.pdf (page 3)\n  - IIP_Nov2025.pdf (page 1)\n  - IIP_Dec2025.pdf (page 1)\n  - CPI_Dec2025.pdf (page 3)\n  - IIP_Feb2026.pdf (page 1)",
+    "answer_ok": false,
+    "retrieval_ok": true,
+    "expected": [
+      "could not find"
+    ],
+    "elapsed": 100.92136478424072
+  }
+]
