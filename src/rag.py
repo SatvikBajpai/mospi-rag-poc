@@ -9,7 +9,7 @@ import torch
 from sentence_transformers import SentenceTransformer
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from .config import COLLECTION, DB_DIR, EMBED_MODEL, LLM_MODEL, MAX_NEW_TOKENS, TOP_K
+from .config import COLLECTION, DB_DIR, EMBED_MODEL, LLM_DEVICE, LLM_MODEL, MAX_NEW_TOKENS, TOP_K
 
 SYSTEM_PROMPT = (
     "You answer questions about Indian official statistics (CPI, IIP, PLFS) "
@@ -42,8 +42,15 @@ def _collection():
 
 @lru_cache(maxsize=1)
 def _llm():
-    device = "mps" if torch.backends.mps.is_available() else "cpu"
-    dtype = torch.float16 if device == "mps" else torch.float32
+    if LLM_DEVICE:
+        device = LLM_DEVICE
+    elif torch.cuda.is_available():
+        device = "cuda"
+    elif torch.backends.mps.is_available():
+        device = "mps"
+    else:
+        device = "cpu"
+    dtype = torch.float32 if device == "cpu" else torch.float16
     print(f"[rag] loading LLM {LLM_MODEL} on {device}")
     tok = AutoTokenizer.from_pretrained(LLM_MODEL)
     model = AutoModelForCausalLM.from_pretrained(LLM_MODEL, torch_dtype=dtype)
