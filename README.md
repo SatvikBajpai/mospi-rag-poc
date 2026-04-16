@@ -1,69 +1,72 @@
 # MoSPI RAG PoC (Small Language Model)
 
-Proof-of-concept RAG over MoSPI press releases (CPI, IIP, PLFS) using a Small Language Model. Goal: show that an SLM + good retrieval can answer questions comparably to the H200-hosted chatbots at a fraction of the cost.
+Proof-of-concept RAG over MoSPI press releases (CPI, IIP, PLFS) using a Small Language Model via Ollama. Goal: show that an SLM + good retrieval can answer questions comparably to the H200-hosted chatbots at a fraction of the cost.
 
 ## Stack
 
 - Embeddings: `BAAI/bge-small-en-v1.5` (384-dim, CPU-friendly)
 - Vector store: ChromaDB (local persistent)
-- Generator SLM: configurable via env var (default: `HuggingFaceTB/SmolLM2-1.7B-Instruct`)
+- Generator SLM: any Ollama model (default: `smollm2:1.7b`)
 - Orchestration: plain Python, Typer CLI
 
-Everything runs locally, no external APIs.
+Everything runs locally, no external APIs, no GPU required.
+
+## Prerequisites
+
+Install Ollama: https://ollama.com/download
+
+```powershell
+# Pull a model (pick one)
+ollama pull smollm2:1.7b        # 1.2 GB, default
+ollama pull phi4-mini            # 2.4 GB, best quality
+ollama pull smollm3              # 1.9 GB, good balance
+ollama pull llama3.2:3b          # 2 GB, solid all-rounder
+```
 
 ## Setup
 
-```bash
+```powershell
 git clone https://github.com/SatvikBajpai/mospi-rag-poc.git
 cd mospi-rag-poc
-python3 -m venv .venv
-source .venv/bin/activate
+python -m venv .venv
+.venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
 ## Usage
 
-```bash
+```powershell
 # One-time: extract + embed + index all PDFs in data/raw/
 python -m src.cli ingest
 
 # Ask questions
 python -m src.cli ask "What was India's CPI inflation in February 2026?"
 python -m src.cli ask "Which sector drove IIP growth in December 2025?"
-python -m src.cli ask "What is the latest PLFS unemployment rate for urban areas?"
+python -m src.cli ask "What is the latest PLFS unemployment rate?"
 
-# Drop into an interactive loop
+# Interactive chat
 python -m src.cli chat
 ```
 
-## Swap the SLM model
+## Swap models
 
-All config is overridable via environment variables:
+Just set an environment variable - no code changes needed:
 
-```bash
-# Try different models
-export LLM_MODEL="microsoft/Phi-4-mini-instruct"       # 3.8B, best benchmarks
-export LLM_MODEL="HuggingFaceTB/SmolLM3-3B"            # 3B, fully open
-export LLM_MODEL="Qwen/Qwen2.5-1.5B-Instruct"          # 1.5B, lightweight
+```powershell
+set OLLAMA_MODEL=phi4-mini
+python -m src.cli ask "What was India's CPI inflation in February 2026?"
 
-# Force a device
-export LLM_DEVICE=cuda    # GPU (auto-detected if available)
-export LLM_DEVICE=mps     # Mac Apple Silicon
-export LLM_DEVICE=cpu     # CPU only (slow but safe)
-
-# Tune generation
-export MAX_NEW_TOKENS=300
+set OLLAMA_MODEL=smollm3
+python -m src.cli ask "What was India's CPI inflation in February 2026?"
 ```
 
 ## Run the eval
 
 16 Q&A pairs with ground-truth answers from the press releases:
 
-```bash
+```powershell
 python -m eval.run_eval
 ```
-
-Reports answer accuracy, retrieval accuracy, and per-question latency.
 
 ## Corpus
 
@@ -83,7 +86,7 @@ mospi-rag-poc/
   src/
     config.py      all settings (env-var overridable)
     ingest.py      PDF -> chunks -> embeddings -> Chroma
-    rag.py         retrieval + prompt + SLM generation
+    rag.py         retrieval + Ollama SLM generation
     cli.py         typer entrypoint
   eval/
     eval_set.json  16 ground-truth Q&A pairs
@@ -94,7 +97,8 @@ mospi-rag-poc/
 
 | Model | Answer accuracy | Retrieval accuracy | Avg latency |
 |---|---|---|---|
-| Qwen2.5-0.5B (MPS) | 11/16 (69%) | 16/16 (100%) | ~27s |
-| SmolLM2-1.7B (CPU) | 1/1 tested (correct) | 1/1 (100%) | ~2h (CPU too slow) |
+| Qwen2.5-0.5B (transformers, MPS) | 11/16 (69%) | 16/16 (100%) | ~27s |
+| SmolLM2-1.7B (transformers, CPU) | 1/1 tested | 1/1 (100%) | ~2-5 min |
+| SmolLM2-1.7B (Ollama, CPU) | TBD | TBD | ~10-20s expected |
 
-Retrieval is the strong link. Generator quality scales with model size.
+Retrieval is the strong link (100%). Generator quality scales with model size.

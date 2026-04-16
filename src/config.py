@@ -7,8 +7,8 @@ DATA_PROCESSED = ROOT / "data" / "processed"
 DB_DIR = ROOT / "db"
 
 EMBED_MODEL = os.environ.get("EMBED_MODEL", "BAAI/bge-small-en-v1.5")
-LLM_MODEL = os.environ.get("LLM_MODEL", "HuggingFaceTB/SmolLM2-1.7B-Instruct")
-LLM_DEVICE = os.environ.get("LLM_DEVICE", "")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "smollm2:1.7b")
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 COLLECTION = "mospi_press_releases"
 
 CHUNK_SIZE = 900
