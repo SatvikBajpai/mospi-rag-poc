@@ -100,6 +100,7 @@ After extraction and chunking: **204 text chunks** indexed in the vector databas
 | Model | Parameters | Backend | Answer Accuracy | Retrieval Accuracy | Avg Latency | Out-of-Corpus |
 |---|---|---|---|---|---|---|
 | Qwen 2.5 | 0.5B | HuggingFace transformers (Mac MPS) | 11/16 (69%) | 16/16 (100%) | ~27s | FAIL (hallucinated) |
+| **Llama 3.2** | **3B** | **Ollama (Windows CPU)** | **14/16 (88%)** | **16/16 (100%)** | **~40s** | **PASS** |
 | Llama 3 | 8B | Ollama (Windows CPU) | 13/16 (81%) | 16/16 (100%) | ~87s | PASS (refused correctly) |
 
 ### 6.3 Analysis of Failures
