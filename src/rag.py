@@ -88,7 +88,7 @@ def generate(messages: list[dict]) -> str:
                 "temperature": 0.0,
             },
         },
-        timeout=120,
+        timeout=600,
     )
     resp.raise_for_status()
     return resp.json()["message"]["content"].strip()
