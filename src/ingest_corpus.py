@@ -14,6 +14,7 @@ candidate PDFs first, then chunk search runs only within those.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -79,7 +80,10 @@ def _strip_html(s: str) -> str:
 
 
 def _doc_id(row: ManifestRow) -> str:
-    return f"{row.source}::{row.parent_id}::{row.chapter_id or '0'}::{row.file_slot}"
+    # URL-hash suffix guarantees uniqueness even when (parent_id, chapter_id, file_slot)
+    # collides — happens with sub_chapters that share an empty chapter_id.
+    suffix = hashlib.md5(row.url.encode("utf-8")).hexdigest()[:8]
+    return f"{row.source}::{row.parent_id}::{row.chapter_id or '0'}::{row.file_slot}::{suffix}"
 
 
 def _doc_summary_text(row: ManifestRow, full_text: str) -> str:
