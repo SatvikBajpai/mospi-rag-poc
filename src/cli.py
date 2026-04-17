@@ -6,6 +6,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from .eval_corpus import inspect_index, run_eval
 from .ingest import build_index
 from .ingest_corpus import build_corpus_index
 from .rag import ask as rag_ask
@@ -118,6 +119,35 @@ def chat_corpus(no_rerank: bool = typer.Option(False, "--no-rerank")):
             continue
         answer, hits = corpus_ask(q, use_rerank=not no_rerank)
         _show_corpus(answer, hits)
+
+
+@app.command(name="inspect-corpus")
+def inspect_corpus():
+    """Show what's currently in the corpus index (counts, sources, sample titles)."""
+    inspect_index()
+
+
+@app.command(name="eval-corpus")
+def eval_corpus(
+    n: int = typer.Option(20, help="Number of synthetic questions to evaluate."),
+    top_docs: int = typer.Option(5),
+    candidate_chunks: int = typer.Option(20),
+    final_chunks: int = typer.Option(4),
+    no_rerank: bool = typer.Option(False, "--no-rerank"),
+    no_answer: bool = typer.Option(False, "--no-answer", help="Skip generating answers (faster)."),
+    seed: int = typer.Option(42),
+):
+    """Synthetic eval: Gemma generates questions from random chunks, then we
+    measure whether retrieval finds those chunks back. Writes eval/corpus_eval_report.md."""
+    run_eval(
+        n=n,
+        top_docs=top_docs,
+        candidate_chunks=candidate_chunks,
+        final_chunks=final_chunks,
+        use_rerank=not no_rerank,
+        generate_answer=not no_answer,
+        seed=seed,
+    )
 
 
 if __name__ == "__main__":
