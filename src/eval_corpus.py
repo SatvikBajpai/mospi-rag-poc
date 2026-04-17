@@ -50,23 +50,36 @@ from .rag_corpus import _generate, hierarchical_retrieve
 
 console = Console()
 
+FACT_EXTRACT_PROMPT = (
+    "You will receive an excerpt from a MoSPI publication. "
+    "Extract ONE specific factual claim that is STATED EXPLICITLY in the excerpt. "
+    "The claim must include a concrete value (a number, percentage, date, name, or proper "
+    "noun) that is written verbatim in the text. Do not extract headings, topic mentions, "
+    "or anything requiring inference.\n"
+    "Output format: a single declarative sentence, nothing else. No preamble.\n"
+    "If the excerpt is a table-of-contents, a list of section titles, a staff directory, or "
+    "contains no concrete factual claim, output exactly: NO_FACT"
+)
+
 QUESTION_GEN_PROMPT = (
-    "You are creating a retrieval test question.\n"
-    "Read the passage below and write ONE factual question it directly answers. "
-    "Requirements:\n"
-    "- Specific: mention the actual topic, entity, or dataset (e.g., 'PLFS unemployment rate', "
-    "'Energy Statistics India 2026', 'CPI inflation'), never generic terms like "
-    "'the passage', 'this document', 'the table', or 'the report'.\n"
-    "- Self-contained: someone seeing only your question (without the passage) should still "
-    "be able to understand what is being asked.\n"
-    "- Grounded: the exact answer must appear in the passage; do not ask about anything inferred.\n"
-    "- Short: one sentence.\n"
-    "Output ONLY the question on a single line, nothing else. No preamble, no explanation."
+    "Convert the factual claim below into a natural question whose answer is the claim's "
+    "specific value (number, date, name, etc.).\n"
+    "Rules:\n"
+    "- Mention the actual subject (e.g., 'Energy Statistics India 2026', 'PLFS August 2025'), "
+    "never generic terms like 'the passage', 'this document', 'the table', 'the report'.\n"
+    "- Self-contained: the question must make sense to someone who has not seen the claim.\n"
+    "- One sentence.\n"
+    "Output ONLY the question, nothing else."
+)
+
+ANSWERABILITY_PROMPT = (
+    "Given ONLY the passage below, can the question be answered with an exact value from "
+    "the passage? Answer with a single word: YES or NO. No other text."
 )
 
 BAD_QUESTION_PATTERNS = (
-    re.compile(r"\bthe (passage|document|report|table|text|context|chapter)\b", re.I),
-    re.compile(r"^what is shown", re.I),
+    re.compile(r"\b(the|this|that) (passage|document|report|table|text|context|chapter|excerpt|publication)\b", re.I),
+    re.compile(r"^(what is shown|what does the table show|according to)", re.I),
 )
 
 
@@ -92,34 +105,67 @@ def _client():
     return chromadb.PersistentClient(path=str(DB_DIR))
 
 
-def _generate_question(chunk_text: str, parent_title: str = "", chapter_title: str = "") -> str:
-    hint = ""
-    if parent_title:
-        hint = f"\n\nThis passage is from the MoSPI publication: \"{parent_title}\""
-        if chapter_title:
-            hint += f" (chapter: \"{chapter_title}\")"
-        hint += ". Use this title in your question for specificity."
-    msgs = [
-        {"role": "system", "content": QUESTION_GEN_PROMPT},
-        {"role": "user", "content": chunk_text[:3000] + hint},
-    ]
+def _llm_call(system: str, user: str, num_predict: int = 120) -> str:
     resp = requests.post(
         f"{OLLAMA_URL}/api/chat",
-        json={"model": OLLAMA_MODEL, "messages": msgs, "stream": False,
-              "options": {"num_predict": 120, "temperature": 0.0}},
+        json={"model": OLLAMA_MODEL,
+              "messages": [{"role": "system", "content": system},
+                           {"role": "user", "content": user}],
+              "stream": False,
+              "options": {"num_predict": num_predict, "temperature": 0.0}},
         timeout=600,
     )
     resp.raise_for_status()
-    q = resp.json()["message"]["content"].strip()
-    q = re.sub(r'^(Question:|Q:)\s*', '', q, flags=re.IGNORECASE).strip()
-    q = q.split("\n")[0].strip().strip('"').strip("'")
-    return q
+    return resp.json()["message"]["content"].strip()
+
+
+def _extract_fact(chunk_text: str, parent_title: str, chapter_title: str) -> str | None:
+    """Step 1: pull a specific factual claim out of the passage. Returns None if
+    the passage has no extractable fact (ToCs, staff lists, bibliographies, etc)."""
+    ctx = f"[Publication: {parent_title}"
+    if chapter_title:
+        ctx += f" / {chapter_title}"
+    ctx += f"]\n\n{chunk_text[:3000]}"
+    out = _llm_call(FACT_EXTRACT_PROMPT, ctx, num_predict=100)
+    out = out.split("\n")[0].strip().strip('"').strip("'")
+    if not out or "NO_FACT" in out.upper() or len(out) < 15:
+        return None
+    return out
+
+
+def _fact_to_question(fact: str, parent_title: str) -> str:
+    prompt_input = f"Subject: MoSPI publication \"{parent_title}\"\n\nClaim: {fact}"
+    out = _llm_call(QUESTION_GEN_PROMPT, prompt_input, num_predict=100)
+    out = re.sub(r"^(Question:|Q:)\s*", "", out, flags=re.IGNORECASE).strip()
+    out = out.split("\n")[0].strip().strip('"').strip("'")
+    return out
+
+
+def _verify_answerable(question: str, chunk_text: str) -> bool:
+    """Step 3: does the passage actually contain the answer? One-word YES/NO."""
+    prompt_input = f"Passage:\n{chunk_text[:3000]}\n\nQuestion: {question}"
+    out = _llm_call(ANSWERABILITY_PROMPT, prompt_input, num_predict=10).upper()
+    return out.startswith("YES")
 
 
 def _is_bad_question(q: str) -> bool:
     if not q or len(q) < 10 or len(q) > 300:
         return True
     return any(p.search(q) for p in BAD_QUESTION_PATTERNS)
+
+
+def _build_question(chunk_text: str, parent_title: str, chapter_title: str) -> str | None:
+    """Three-step generation: extract fact, phrase as question, verify answerable.
+    Returns None if any step fails — caller should skip this sample."""
+    fact = _extract_fact(chunk_text, parent_title, chapter_title)
+    if fact is None:
+        return None
+    question = _fact_to_question(fact, parent_title)
+    if _is_bad_question(question):
+        return None
+    if not _verify_answerable(question, chunk_text):
+        return None
+    return question
 
 
 def _sample_chunks(n: int, min_words: int = 80, seed: int = 42) -> list[dict]:
@@ -187,14 +233,15 @@ def _run_one(sample: dict, top_docs: int, candidate_chunks: int, final_chunks: i
     text = sample["text"]
     meta = sample["meta"]
 
-    # Generate question, retry up to 3 times if Gemma returns a bad one.
-    question = ""
-    for _ in range(3):
-        question = _generate_question(text, meta.get("parent_title", ""), meta.get("chapter_title", ""))
-        if not _is_bad_question(question):
+    # Three-step question generation with answerability check.
+    # Up to 2 retries because Gemma is stochastic even at temp 0 on some tokenizers.
+    question: str | None = None
+    for _ in range(2):
+        question = _build_question(text, meta.get("parent_title", ""), meta.get("chapter_title", ""))
+        if question:
             break
-    if _is_bad_question(question):
-        return None  # skip this sample - question generator kept producing garbage
+    if not question:
+        return None  # extractor said NO_FACT or answerability check failed — skip
 
     from .rag_corpus import retrieve_chunks, retrieve_docs
 
