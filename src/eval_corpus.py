@@ -100,22 +100,63 @@ def _generate_question(chunk_text: str) -> str:
 
 
 def _sample_chunks(n: int, min_words: int = 80, seed: int = 42) -> list[dict]:
-    """Pick N random chunks of decent length (skip short or table-only chunks)."""
+    """Pick N random chunks spread across DIFFERENT PDFs.
+
+    Strategy: pick n random doc_ids first, then pick one prose-y chunk from each.
+    This avoids the failure mode where one big PDF dominates the sample because
+    its chunks happen to be at the start of ChromaDB's iteration order.
+    """
     rng = random.Random(seed)
-    col = _client().get_collection(COLLECTION_CHUNKS)
-    total = col.count()
-    if total == 0:
-        raise RuntimeError("chunks collection is empty - run ingest-corpus first")
-    # Pull a generous oversample so we can filter
-    want_pool = min(total, max(n * 8, 200))
-    offsets = sorted(rng.sample(range(total), want_pool))
-    res = col.get(limit=want_pool, include=["documents", "metadatas"])
+    docs_col = _client().get_collection(COLLECTION_DOCS)
+    chunks_col = _client().get_collection(COLLECTION_CHUNKS)
+
+    n_docs = docs_col.count()
+    if n_docs == 0:
+        raise RuntimeError("docs collection is empty - run ingest-corpus first")
+
+    # Pull all doc_ids; oversample then pick the first n that have a usable chunk.
+    all_docs = docs_col.get(limit=n_docs, include=["metadatas"])
+    doc_ids = [m["doc_id"] for m in all_docs["metadatas"]]
+    rng.shuffle(doc_ids)
+
     pool = []
-    for cid, doc, meta in zip(res["ids"], res["documents"], res["metadatas"]):
-        if len(doc.split()) >= min_words:
-            pool.append({"chunk_id": cid, "text": doc, "meta": meta})
-    rng.shuffle(pool)
-    return pool[:n]
+    for did in doc_ids:
+        if len(pool) >= n:
+            break
+        # Get all chunks for this doc, pick the longest prose-y one.
+        res = chunks_col.get(where={"doc_id": did}, include=["documents", "metadatas"])
+        candidates = [
+            (cid, doc, meta)
+            for cid, doc, meta in zip(res["ids"], res["documents"], res["metadatas"])
+            if len(doc.split()) >= min_words and _looks_like_prose(doc)
+        ]
+        if not candidates:
+            continue
+        # Prefer chunks with more prose-like content
+        candidates.sort(key=lambda c: _prose_score(c[1]), reverse=True)
+        cid, doc, meta = candidates[0]
+        pool.append({"chunk_id": cid, "text": doc, "meta": meta})
+    return pool
+
+
+def _looks_like_prose(text: str) -> bool:
+    """Reject chunks that are clearly tables (mostly numbers, low alpha-ratio)."""
+    if not text:
+        return False
+    words = text.split()
+    if len(words) < 20:
+        return False
+    n_alpha_words = sum(1 for w in words if any(c.isalpha() for c in w) and len(w) > 2)
+    return n_alpha_words / len(words) > 0.55
+
+
+def _prose_score(text: str) -> float:
+    """Higher = more prose-like. Used to pick the most question-friendly chunk per doc."""
+    words = text.split()
+    if not words:
+        return 0.0
+    alpha_chars = sum(1 for c in text if c.isalpha())
+    return alpha_chars / max(1, len(text))
 
 
 def _run_one(sample: dict, top_docs: int, candidate_chunks: int, final_chunks: int,
