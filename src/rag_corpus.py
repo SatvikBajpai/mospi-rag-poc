@@ -1,20 +1,22 @@
 """
-Hierarchical RAG over the full MoSPI corpus.
+Hierarchical RAG over the full MoSPI corpus (v2, hybrid retrieval).
 
-Two-stage retrieval to keep accuracy from collapsing as the corpus scales:
+Pipeline:
 
   query
-    -> doc-level vector search   (top HIER_TOP_DOCS PDFs)
-    -> chunk-level vector search  (top HIER_CANDIDATE_CHUNKS chunks, filtered to those PDFs)
-    -> cross-encoder rerank       (top HIER_FINAL_CHUNKS)
-    -> Ollama generation          (Gemma 3 4B by default)
+    -> [vector doc search]  union via RRF  [BM25 doc search]    -> top HIER_TOP_DOCS PDFs
+    -> [vector chunk search] union via RRF [BM25 chunk search]  (both filtered to those PDFs)
+       -> top HIER_CANDIDATE_CHUNKS chunks
+    -> cross-encoder rerank  -> top HIER_FINAL_CHUNKS
+    -> Ollama / Gemma generation
 
-Dropping the reranker (`--no-rerank`) skips stage 3 and feeds the top
-HIER_FINAL_CHUNKS chunks straight from the bi-encoder. The reranker adds
-~50-200ms on CPU but materially improves precision when the doc is long.
+Why hybrid: pure vector retrieval misses exact strings (named entities,
+numbers, codes). Pure BM25 misses paraphrases. RRF fusion gets both.
 """
 from __future__ import annotations
 
+import pickle
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 
@@ -23,6 +25,8 @@ import requests
 from sentence_transformers import CrossEncoder, SentenceTransformer
 
 from .config import (
+    BM25_CHUNKS_PATH,
+    BM25_DOCS_PATH,
     COLLECTION_CHUNKS,
     COLLECTION_DOCS,
     DB_DIR,
@@ -34,21 +38,29 @@ from .config import (
     OLLAMA_MODEL,
     OLLAMA_URL,
     RERANKER_MODEL,
+    RRF_K,
 )
 
 SYSTEM_PROMPT = (
     "You answer questions about official Indian statistics using ONLY the provided "
-    "context excerpts from MoSPI publications.\n"
-    "- If the answer is not in the context, reply: "
-    "\"I could not find this in the provided MoSPI documents.\"\n"
-    "- Be concise. Quote exact numbers, dates, and series names from the context.\n"
-    "- Do not invent figures. Do not write a sources list - the caller adds it."
+    "context excerpts from MoSPI publications. Follow these rules strictly:\n"
+    "1. If the answer is not explicitly present in the context, reply exactly: "
+    "\"I could not find this in the provided MoSPI documents.\" Do not guess.\n"
+    "2. Quote exact numbers, percentages, dates, and names as written in the context. "
+    "Do not paraphrase numeric values.\n"
+    "3. When the context is a table, identify the correct row AND column before "
+    "answering. If you cannot unambiguously identify both, decline per rule 1.\n"
+    "4. Do not combine numbers from different excerpts unless the question asks for "
+    "a comparison and both excerpts are clearly about the same measure.\n"
+    "5. Keep the answer short - 1-3 sentences. Do not write a sources list (the caller "
+    "adds it)."
 )
 
 
 @dataclass
 class CorpusHit:
     text: str
+    chunk_id: str
     doc_id: str
     parent_title: str
     chapter_title: str
@@ -82,12 +94,89 @@ def _chunks_col():
     return _client().get_collection(COLLECTION_CHUNKS)
 
 
-def retrieve_docs(query: str, k: int = HIER_TOP_DOCS) -> list[str]:
-    """Stage 1: doc-level search. Returns top-k doc_ids."""
+@lru_cache(maxsize=1)
+def _bm25_docs():
+    if not BM25_DOCS_PATH.exists():
+        return None
+    with BM25_DOCS_PATH.open("rb") as f:
+        return pickle.load(f)
+
+
+@lru_cache(maxsize=1)
+def _bm25_chunks():
+    if not BM25_CHUNKS_PATH.exists():
+        return None
+    with BM25_CHUNKS_PATH.open("rb") as f:
+        return pickle.load(f)
+
+
+_TOK_RE = re.compile(r"[A-Za-z0-9]+")
+
+
+def _tokenize(text: str) -> list[str]:
+    return [t.lower() for t in _TOK_RE.findall(text or "")]
+
+
+def _rrf_fuse(ranked_lists: list[list[str]], k: int = RRF_K) -> list[tuple[str, float]]:
+    """Reciprocal Rank Fusion. Each list is ordered best-first by id.
+    Returns (id, score) sorted best-first."""
+    scores: dict[str, float] = {}
+    for lst in ranked_lists:
+        for rank, item_id in enumerate(lst):
+            scores[item_id] = scores.get(item_id, 0.0) + 1.0 / (k + rank + 1)
+    return sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
+
+
+# ---------------- Stage A: hybrid doc retrieval ----------------
+
+def _vector_top_docs(query: str, k: int) -> list[str]:
     emb = _embedder().encode([query], normalize_embeddings=True).tolist()
     res = _docs_col().query(query_embeddings=emb, n_results=k)
-    metas = res["metadatas"][0]
-    return [m["doc_id"] for m in metas]
+    return [m["doc_id"] for m in res["metadatas"][0]]
+
+
+def _bm25_top_docs(query: str, k: int) -> list[str]:
+    bm = _bm25_docs()
+    if bm is None or bm["bm25"] is None:
+        return []
+    scores = bm["bm25"].get_scores(_tokenize(query))
+    order = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:k]
+    return [bm["ids"][i] for i in order]
+
+
+def retrieve_docs(query: str, k: int = HIER_TOP_DOCS) -> list[str]:
+    """Hybrid: vector + BM25, fused via RRF. Each side provides 2k candidates."""
+    vec = _vector_top_docs(query, 2 * k)
+    bm = _bm25_top_docs(query, 2 * k)
+    fused = _rrf_fuse([vec, bm])
+    return [doc_id for doc_id, _ in fused[:k]]
+
+
+# ---------------- Stage B: hybrid chunk retrieval ----------------
+
+def _vector_chunks_in_docs(query: str, doc_ids: list[str], k: int) -> list[tuple[str, dict, str, float]]:
+    emb = _embedder().encode([query], normalize_embeddings=True).tolist()
+    where = {"doc_id": {"$in": doc_ids}} if doc_ids else None
+    res = _chunks_col().query(query_embeddings=emb, n_results=k, where=where)
+    out = []
+    for cid, doc, meta, dist in zip(res["ids"][0], res["documents"][0], res["metadatas"][0], res["distances"][0]):
+        out.append((cid, meta, doc, 1.0 - float(dist)))
+    return out
+
+
+def _bm25_chunks_in_docs(query: str, doc_ids: list[str], k: int) -> list[str]:
+    bm = _bm25_chunks()
+    if bm is None or bm["bm25"] is None:
+        return []
+    allowed = set(doc_ids)
+    scores = bm["bm25"].get_scores(_tokenize(query))
+    # filter to allowed docs, sort by score
+    order = sorted(
+        [i for i in range(len(scores)) if bm["doc_ids"][i] in allowed],
+        key=lambda i: scores[i],
+        reverse=True,
+    )[:k]
+    return [bm["ids"][i] for i in order]
 
 
 def retrieve_chunks(
@@ -95,29 +184,45 @@ def retrieve_chunks(
     doc_ids: list[str],
     k: int = HIER_CANDIDATE_CHUNKS,
 ) -> list[CorpusHit]:
-    """Stage 2: chunk-level search restricted to the candidate doc_ids."""
-    emb = _embedder().encode([query], normalize_embeddings=True).tolist()
-    where = {"doc_id": {"$in": doc_ids}} if doc_ids else None
-    res = _chunks_col().query(query_embeddings=emb, n_results=k, where=where)
+    """Hybrid chunk retrieval within the candidate doc set."""
+    vec_hits = _vector_chunks_in_docs(query, doc_ids, 2 * k)
+    vec_ranked_ids = [c[0] for c in vec_hits]
+    bm_ranked_ids = _bm25_chunks_in_docs(query, doc_ids, 2 * k)
+    fused = _rrf_fuse([vec_ranked_ids, bm_ranked_ids])
+
+    # We need metadata/text for any chunk_id in fused. Vector hits already carry it;
+    # for BM25-only hits, fetch from Chroma.
+    vec_by_id: dict[str, tuple[dict, str, float]] = {cid: (m, d, s) for cid, m, d, s in vec_hits}
+    missing = [cid for cid, _ in fused[:k] if cid not in vec_by_id]
+    if missing:
+        res = _chunks_col().get(ids=missing, include=["documents", "metadatas"])
+        for cid, doc, meta in zip(res["ids"], res["documents"], res["metadatas"]):
+            vec_by_id[cid] = (meta, doc, 0.0)
+
     out: list[CorpusHit] = []
-    for doc, meta, dist in zip(res["documents"][0], res["metadatas"][0], res["distances"][0]):
+    for cid, score in fused[:k]:
+        if cid not in vec_by_id:
+            continue
+        meta, doc, vec_score = vec_by_id[cid]
         out.append(
             CorpusHit(
                 text=doc,
+                chunk_id=cid,
                 doc_id=meta.get("doc_id", ""),
                 parent_title=meta.get("parent_title", ""),
                 chapter_title=meta.get("chapter_title", ""),
                 filename=meta.get("filename", "?"),
                 page=int(meta.get("page", 0)),
                 url=meta.get("url", ""),
-                score=1.0 - float(dist),
+                score=vec_score,
             )
         )
     return out
 
 
+# ---------------- Stage C: rerank ----------------
+
 def rerank(query: str, hits: list[CorpusHit], k: int = HIER_FINAL_CHUNKS) -> list[CorpusHit]:
-    """Stage 3: cross-encoder reranking."""
     if not hits:
         return hits
     pairs = [(query, h.text) for h in hits]
@@ -141,6 +246,8 @@ def hierarchical_retrieve(
         return rerank(query, candidates, k=final_chunks)
     return candidates[:final_chunks]
 
+
+# ---------------- Stage D: generation ----------------
 
 def _build_prompt(query: str, hits: list[CorpusHit]) -> list[dict]:
     blocks = []

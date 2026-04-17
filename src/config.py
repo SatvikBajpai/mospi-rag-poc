@@ -21,7 +21,12 @@ CORPUS_MANIFEST = DATA_RAW / "manifest.jsonl"
 COLLECTION_DOCS = "mospi_corpus_docs"
 COLLECTION_CHUNKS = "mospi_corpus_chunks"
 RERANKER_MODEL = os.environ.get("RERANKER_MODEL", "BAAI/bge-reranker-base")
-HIER_TOP_DOCS = int(os.environ.get("HIER_TOP_DOCS", "5"))
-HIER_CANDIDATE_CHUNKS = int(os.environ.get("HIER_CANDIDATE_CHUNKS", "20"))
-HIER_FINAL_CHUNKS = int(os.environ.get("HIER_FINAL_CHUNKS", "4"))
-DOC_SUMMARY_WORDS = 500  # words from start of doc used to compute doc-level embedding
+HIER_TOP_DOCS = int(os.environ.get("HIER_TOP_DOCS", "7"))
+HIER_CANDIDATE_CHUNKS = int(os.environ.get("HIER_CANDIDATE_CHUNKS", "25"))
+HIER_FINAL_CHUNKS = int(os.environ.get("HIER_FINAL_CHUNKS", "6"))
+
+# BM25 (lexical) indexes stored on disk alongside ChromaDB
+BM25_DOCS_PATH = DB_DIR / "bm25_docs.pkl"
+BM25_CHUNKS_PATH = DB_DIR / "bm25_chunks.pkl"
+# RRF (reciprocal rank fusion) constant. k=60 is the paper default.
+RRF_K = 60

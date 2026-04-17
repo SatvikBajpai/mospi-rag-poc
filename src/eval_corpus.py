@@ -51,12 +51,22 @@ from .rag_corpus import _generate, hierarchical_retrieve
 console = Console()
 
 QUESTION_GEN_PROMPT = (
-    "You are creating a question for a search-evaluation test.\n"
-    "Read the passage below, then write ONE specific, factual question that the passage "
-    "directly answers. The question must be self-contained (do not refer to 'the passage' "
-    "or 'the document'). Use proper nouns, numbers, and dates from the passage so the "
-    "question is unambiguous.\n\n"
-    "Output ONLY the question on a single line, nothing else."
+    "You are creating a retrieval test question.\n"
+    "Read the passage below and write ONE factual question it directly answers. "
+    "Requirements:\n"
+    "- Specific: mention the actual topic, entity, or dataset (e.g., 'PLFS unemployment rate', "
+    "'Energy Statistics India 2026', 'CPI inflation'), never generic terms like "
+    "'the passage', 'this document', 'the table', or 'the report'.\n"
+    "- Self-contained: someone seeing only your question (without the passage) should still "
+    "be able to understand what is being asked.\n"
+    "- Grounded: the exact answer must appear in the passage; do not ask about anything inferred.\n"
+    "- Short: one sentence.\n"
+    "Output ONLY the question on a single line, nothing else. No preamble, no explanation."
+)
+
+BAD_QUESTION_PATTERNS = (
+    re.compile(r"\bthe (passage|document|report|table|text|context|chapter)\b", re.I),
+    re.compile(r"^what is shown", re.I),
 )
 
 
@@ -71,8 +81,10 @@ class EvalCase:
     expected_chunk_text: str
     retrieved_chunk_ids: list[str]
     retrieved_doc_ids: list[str]
+    final_chunk_ids: list[str]
     chunk_recall: bool
     doc_recall: bool
+    final_chunk_recall: bool
     answer: str | None = None
 
 
@@ -80,10 +92,16 @@ def _client():
     return chromadb.PersistentClient(path=str(DB_DIR))
 
 
-def _generate_question(chunk_text: str) -> str:
+def _generate_question(chunk_text: str, parent_title: str = "", chapter_title: str = "") -> str:
+    hint = ""
+    if parent_title:
+        hint = f"\n\nThis passage is from the MoSPI publication: \"{parent_title}\""
+        if chapter_title:
+            hint += f" (chapter: \"{chapter_title}\")"
+        hint += ". Use this title in your question for specificity."
     msgs = [
         {"role": "system", "content": QUESTION_GEN_PROMPT},
-        {"role": "user", "content": chunk_text[:3000]},
+        {"role": "user", "content": chunk_text[:3000] + hint},
     ]
     resp = requests.post(
         f"{OLLAMA_URL}/api/chat",
@@ -93,10 +111,15 @@ def _generate_question(chunk_text: str) -> str:
     )
     resp.raise_for_status()
     q = resp.json()["message"]["content"].strip()
-    # Strip common preamble fluff
     q = re.sub(r'^(Question:|Q:)\s*', '', q, flags=re.IGNORECASE).strip()
-    q = q.split("\n")[0].strip()
+    q = q.split("\n")[0].strip().strip('"').strip("'")
     return q
+
+
+def _is_bad_question(q: str) -> bool:
+    if not q or len(q) < 10 or len(q) > 300:
+        return True
+    return any(p.search(q) for p in BAD_QUESTION_PATTERNS)
 
 
 def _sample_chunks(n: int, min_words: int = 80, seed: int = 42) -> list[dict]:
@@ -160,31 +183,40 @@ def _prose_score(text: str) -> float:
 
 
 def _run_one(sample: dict, top_docs: int, candidate_chunks: int, final_chunks: int,
-             use_rerank: bool, generate_answer: bool) -> EvalCase:
+             use_rerank: bool, generate_answer: bool) -> EvalCase | None:
     text = sample["text"]
     meta = sample["meta"]
-    question = _generate_question(text)
-    hits = hierarchical_retrieve(
+
+    # Generate question, retry up to 3 times if Gemma returns a bad one.
+    question = ""
+    for _ in range(3):
+        question = _generate_question(text, meta.get("parent_title", ""), meta.get("chapter_title", ""))
+        if not _is_bad_question(question):
+            break
+    if _is_bad_question(question):
+        return None  # skip this sample - question generator kept producing garbage
+
+    from .rag_corpus import retrieve_chunks, retrieve_docs
+
+    cand_doc_ids = retrieve_docs(question, k=top_docs)
+    cand_chunks = retrieve_chunks(question, cand_doc_ids, k=candidate_chunks)
+    cand_chunk_ids = [c.chunk_id for c in cand_chunks]
+
+    final_hits = hierarchical_retrieve(
         question, top_docs=top_docs, candidate_chunks=candidate_chunks,
         final_chunks=final_chunks, use_rerank=use_rerank,
     )
-    # Note: hierarchical_retrieve only returns the FINAL (post-rerank) hits.
-    # For a proper recall measurement we want the candidate set too. So we
-    # also peek at the candidate doc set via a fresh retrieve_docs call.
-    from .rag_corpus import retrieve_chunks, retrieve_docs
-    cand_doc_ids = retrieve_docs(question, k=top_docs)
-    cand_chunks = retrieve_chunks(question, cand_doc_ids, k=candidate_chunks)
-    cand_chunk_ids = [c.text for c in cand_chunks]  # using text since CorpusHit has no chunk_id field
-    # Compare on chunk text equality as a proxy for chunk_id (same content == same chunk)
-    chunk_hit = any(text == c.text for c in cand_chunks)
+    final_ids = [h.chunk_id for h in final_hits]
+
     doc_hit = meta["doc_id"] in cand_doc_ids
+    chunk_hit = sample["chunk_id"] in cand_chunk_ids
+    final_chunk_hit = sample["chunk_id"] in final_ids
 
     answer = None
     if generate_answer:
         from .rag_corpus import _build_prompt
-        msgs = _build_prompt(question, hits)
         try:
-            answer = _generate(msgs)
+            answer = _generate(_build_prompt(question, final_hits))
         except Exception as e:
             answer = f"<generation failed: {e}>"
 
@@ -196,10 +228,12 @@ def _run_one(sample: dict, top_docs: int, candidate_chunks: int, final_chunks: i
         expected_filename=meta.get("filename", "?"),
         expected_page=int(meta.get("page", 0)),
         expected_chunk_text=text[:600],
-        retrieved_chunk_ids=[],
+        retrieved_chunk_ids=cand_chunk_ids,
         retrieved_doc_ids=cand_doc_ids,
+        final_chunk_ids=final_ids,
         chunk_recall=chunk_hit,
         doc_recall=doc_hit,
+        final_chunk_recall=final_chunk_hit,
         answer=answer,
     )
 
@@ -209,15 +243,17 @@ def _write_report(cases: list[EvalCase], out_md: Path) -> None:
     n = len(cases)
     doc_recall = sum(1 for c in cases if c.doc_recall) / n
     chunk_recall = sum(1 for c in cases if c.chunk_recall) / n
+    final_recall = sum(1 for c in cases if c.final_chunk_recall) / n
     lines += [
         f"- Cases: **{n}**",
-        f"- doc_recall@top-docs: **{doc_recall:.1%}**  (right PDF reached the candidate set)",
-        f"- chunk_recall@candidates: **{chunk_recall:.1%}**  (originating chunk reached the candidate set)",
+        f"- doc_recall@top-docs: **{doc_recall:.1%}** - right PDF reached the candidate set",
+        f"- chunk_recall@candidates: **{chunk_recall:.1%}** - originating chunk reached the pre-rerank pool",
+        f"- chunk_recall@final (post-rerank): **{final_recall:.1%}** - originating chunk survived reranking into Gemma's context",
         "",
     ]
     for i, c in enumerate(cases, 1):
         lines += [
-            f"## Q{i}  doc_recall={'YES' if c.doc_recall else 'NO'}  chunk_recall={'YES' if c.chunk_recall else 'NO'}",
+            f"## Q{i}  doc={'YES' if c.doc_recall else 'NO'}  chunk={'YES' if c.chunk_recall else 'NO'}  final={'YES' if c.final_chunk_recall else 'NO'}",
             "",
             f"**Question:** {c.question}",
             "",
@@ -226,7 +262,9 @@ def _write_report(cases: list[EvalCase], out_md: Path) -> None:
             f"**Expected passage (truncated):**",
             f"> {c.expected_chunk_text.replace(chr(10), ' ')}",
             "",
-            f"**Retrieved candidate doc_ids:** `{c.retrieved_doc_ids}`",
+            f"**Candidate doc_ids (top {len(c.retrieved_doc_ids)}):** `{c.retrieved_doc_ids}`",
+            "",
+            f"**Final chunk_ids fed to Gemma:** `{c.final_chunk_ids}`",
             "",
         ]
         if c.answer:
@@ -259,12 +297,16 @@ def run_eval(
         except Exception as e:
             console.print(f"[red]case {i} failed: {e}[/red]")
             continue
+        if case is None:
+            console.print(f"[yellow]case {i} skipped (question generator failed)[/yellow]")
+            continue
         cases.append(case)
         dt = time.time() - t0
         console.print(
             f"  Q: {case.question[:90]}{'...' if len(case.question)>90 else ''}\n"
-            f"  doc_recall={'[green]YES[/green]' if case.doc_recall else '[red]NO[/red]'}  "
-            f"chunk_recall={'[green]YES[/green]' if case.chunk_recall else '[red]NO[/red]'}  "
+            f"  doc={'[green]Y[/green]' if case.doc_recall else '[red]N[/red]'}  "
+            f"chunk={'[green]Y[/green]' if case.chunk_recall else '[red]N[/red]'}  "
+            f"final={'[green]Y[/green]' if case.final_chunk_recall else '[red]N[/red]'}  "
             f"({dt:.1f}s)"
         )
 
@@ -281,11 +323,13 @@ def run_eval(
         return
     doc_recall = sum(1 for c in cases if c.doc_recall) / n_ok
     chunk_recall = sum(1 for c in cases if c.chunk_recall) / n_ok
+    final_recall = sum(1 for c in cases if c.final_chunk_recall) / n_ok
     table = Table(title="Eval summary", show_lines=False)
     table.add_column("metric"); table.add_column("value", justify="right")
     table.add_row("cases", str(n_ok))
     table.add_row("doc_recall", f"{doc_recall:.1%}")
-    table.add_row("chunk_recall", f"{chunk_recall:.1%}")
+    table.add_row("chunk_recall (pre-rerank)", f"{chunk_recall:.1%}")
+    table.add_row("chunk_recall (post-rerank)", f"{final_recall:.1%}")
     console.print(table)
     console.print(f"[green]wrote {out_jsonl} and {out_md}[/green]")
 
